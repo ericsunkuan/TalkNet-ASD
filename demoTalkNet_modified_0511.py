@@ -1,5 +1,7 @@
 import sys, time, os, tqdm, torch, argparse, glob, subprocess, warnings, cv2, pickle, numpy, pdb, math, python_speech_features
+
 import json
+
 from scipy import signal
 from shutil import rmtree
 from scipy.io import wavfile
@@ -90,20 +92,72 @@ def scene_detect(args):
 	with open(savePath, 'wb') as fil:
 		pickle.dump(sceneList, fil)
 		sys.stderr.write('%s - scenes detected %d\n'%(args.videoFilePath, len(sceneList)))
+	print(sceneList[0])
+	print(type(sceneList))
 	return sceneList
 
 def inference_video(args):
 	# GPU: Face detection, output is the list contains the face location and score in this frame
-	DET = S3FD(device='cuda')
+	DET = S3FD(device='cpu')
 	flist = glob.glob(os.path.join(args.pyframesPath, '*.jpg'))
 	flist.sort()
 	dets = []
+	check = True
 	for fidx, fname in enumerate(flist):
 		image = cv2.imread(fname)
 		imageNumpy = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+		#print("fidx:",fidx)
+		# ct = 0
+		# if(ct==0):
+		# 	ct+=1
+		# 	print(imageNumpy.shape)
+		# 	print(imageNumpy.shape[0])
 		bboxes = DET.detect_faces(imageNumpy, conf_th=0.9, scales=[args.facedetScale])
 		dets.append([])
+		
+
 		for bbox in bboxes:
+			# if(ct==0):
+			# 	print("bbox:")
+			# 	print((bbox[:-1]).tolist())
+			# 	print("conf:")
+			# 	print(bbox[-1])
+			# 	print(bbox[:-1][0]," ",bbox[:-1][1]," ",bbox[:-1][2]," ",bbox[:-1][3])
+			# 	ct+=1
+			"""
+			modified
+			"""
+			# xlength = bbox[:-1][2] - bbox[:-1][0]
+			# ylength = bbox[:-1][3] - bbox[:-1][1]
+			# # if check:
+			# # 	check = False
+			# # 	print("x = ", xlength, " y = ", ylength)
+			# if (bbox[:-1][0] + (0.45)*xlength > imageNumpy.shape[1]) : # <0
+			# 	bbox[:-1][0] = bbox[:-1][0]
+			# else :
+			# 	bbox[:-1][0] = (bbox[:-1][0] + (0.45)*xlength) 
+			# if (bbox[:-1][2] - (0.45)*xlength < 0) :  #> imageNumpy.shape[1]
+			# 	bbox[:-1][2] = imageNumpy.shape[1]
+			# else :
+			# 	bbox[:-1][2] = (bbox[:-1][2] - (0.45)*xlength)
+
+			# if (bbox[:-1][1] - (1/5)*ylength < 0 and bbox[:-1][1] - (1/5)*ylength > imageNumpy.shape[0]) :
+			# 	bbox[:-1][1] = 0
+			# else :
+			# 	bbox[:-1][1] = (bbox[:-1][1] - (1/5)*ylength)
+			# if (bbox[:-1][3] - (3/10)*ylength < 0 ) : #> imageNumpy.shape[0]
+			# 	bbox[:-1][3] = 0
+			# 	# bbox[:-1][3] = imageNumpy.shape[0]
+			# else :
+			# 	bbox[:-1][3] = (bbox[:-1][3] - (3/10)*ylength)
+
+			"""
+			modified
+			"""
+			ct = 0
+			if(ct==0):
+				ct+=1
+				#print({'frame':fidx, 'bbox':(bbox[:-1]).tolist(), 'conf':bbox[-1]})
 			dets[-1].append({'frame':fidx, 'bbox':(bbox[:-1]).tolist(), 'conf':bbox[-1]}) # dets has the frames info, bbox info, conf info
 		sys.stderr.write('%s-%05d; %d dets\r' % (args.videoFilePath, fidx, len(dets[-1])))
 	savePath = os.path.join(args.pyworkPath,'faces.pckl')
@@ -160,25 +214,21 @@ def track_shot(args, sceneFaces):
 				tracks.append({'frame':frameI,'bbox':bboxesI})
 	return tracks
 
+
+
 def recrop_video(args, track, cropFile):
 	# CPU: crop the face clips
 	flist = glob.glob(os.path.join(args.pyframesPath, '*.jpg')) # Read the frames
 	flist.sort()
 	vOut = cv2.VideoWriter(cropFile + 't.avi', cv2.VideoWriter_fourcc(*'XVID'), 25, (224,224))# Write video
 	dets = {'x':[], 'y':[], 's':[]}
-	crp_scale = {
-		'width_right': 0.45,
-		'width_left': 0.45,
-		'height_top': 0.2,
-		'height_bottom': 0.3
-	}
 	for det in track['bbox']: # Read the tracks
 		xlength = det[2] - det[0]
 		ylength = det[3] - det[1]
-		det[0] = det[0] + (crp_scale['width_right']*xlength) 
-		det[2] = det[2] - (crp_scale['width_left']*xlength)
-		det[1] = det[1] - (crp_scale['height_top']*ylength)
-		det[3] = det[3] - (crp_scale['height_bottom']*ylength)
+		det[0] = det[0] + (0.45)*xlength 
+		det[2] = det[2] - (0.45)*xlength
+		det[1] = det[1] - (1/5)*ylength
+		det[3] = det[3] - (3/10)*ylength
 		dets['s'].append(max((det[3]-det[1]), (det[2]-det[0]))/2) 
 		dets['y'].append((det[1]+det[3])/2) # crop center x 
 		dets['x'].append((det[0]+det[2])/2) # crop center y
@@ -208,6 +258,7 @@ def recrop_video(args, track, cropFile):
 	output = subprocess.call(command, shell=True, stdout=None)
 	os.remove(cropFile + 't.avi')
 	return {'track':track, 'proc_track':dets}
+
 
 def crop_video(args, track, cropFile):
 	# CPU: crop the face clips
@@ -288,8 +339,8 @@ def evaluate_network(files, args):
 			scores = []
 			with torch.no_grad():
 				for i in range(batchSize):
-					inputA = torch.FloatTensor(audioFeature[i * duration * 100:(i+1) * duration * 100,:]).unsqueeze(0).cuda()
-					inputV = torch.FloatTensor(videoFeature[i * duration * 25: (i+1) * duration * 25,:,:]).unsqueeze(0).cuda()
+					inputA = torch.FloatTensor(audioFeature[i * duration * 100:(i+1) * duration * 100,:]).unsqueeze(0).cpu()
+					inputV = torch.FloatTensor(videoFeature[i * duration * 25: (i+1) * duration * 25,:,:]).unsqueeze(0).cpu()
 					embedA = s.model.forward_audio_frontend(inputA)
 					embedV = s.model.forward_visual_frontend(inputV)	
 					embedA, embedV = s.model.forward_cross_attention(embedA, embedV)
@@ -300,6 +351,50 @@ def evaluate_network(files, args):
 		allScore = numpy.round((numpy.mean(numpy.array(allScore), axis = 0)), 1).astype(float)
 		allScores.append(allScore)	
 	return allScores
+
+def cal_time(scores, speakers):
+	talking = numpy.zeros((2,len(scores[0]))) 
+	#is_talking = False
+	print("caltime")
+	print(speakers, " ", len(scores[0]))
+	for j in range(2):
+		last_sec = scores[j]
+		#print(last_sec)
+		last_sec = numpy.insert(last_sec, 0, 0)
+		#print(last_sec)
+		for i in range(len(scores[0])):
+			if(last_sec[i]== 0 and scores[j][i]==1):
+				talking[j][i] = 1
+			if(last_sec[i]== 1 and scores[j][i]==0):
+				talking[j][i-1] = 2
+			if(i == len(scores[0])-1 and scores[j][i] == 1):
+				talking[j][i] = 2
+			#print(talking[j])
+	
+	talktime = []
+	for j in range(2):
+		talktimej = []
+		last_talk = 0                   
+		for i in range(len(talking[0])):      
+					
+			if(talking[j][i]) == 1:
+				last_talk = i
+			if(talking[j][i]) == 2:
+				if(i == (len(talking[0])-1)):
+					if  (scores[j][i-1] == 0):
+						talktimej.append((round(0.04*i,2), round(0.04*i+0.04,2)))
+					else : talktimej.append((round(0.04*last_talk,2), round(0.04*i+0.04,2)))
+				else: talktimej.append((round(0.04*last_talk,2), round(0.04*i+0.04,2)))
+						
+			# print(talktimej)
+		talktime.append(talktimej)
+	return talktime
+
+
+
+
+
+
 
 def visualization(tracks, scores, args):
 	# CPU: visulize the result for video format
@@ -317,14 +412,66 @@ def visualization(tracks, scores, args):
 	fh = firstImage.shape[0]
 	vOut = cv2.VideoWriter(os.path.join(args.pyaviPath, 'video_only.avi'), cv2.VideoWriter_fourcc(*'XVID'), 25, (fw,fh))
 	colorDict = {0: 0, 1: 255}
+	ctt = 0
+	totalfaces = 0
+	facecount = False
+	talktime = []
+	
+ 
 	for fidx, fname in tqdm.tqdm(enumerate(flist), total = len(flist)):
 		image = cv2.imread(fname)
+		
+		if(facecount == False):
+			facecount = True
+			totalfaces = len(faces[fidx])
+			print("totalfaces = ", totalfaces)
+			for i in range(10):
+				talktime.append([])
+		
+		facect = 0
 		for face in faces[fidx]:
+			
 			clr = colorDict[int((face['score'] >= 0))]
+   
+			if(clr == 255): talktime[facect].append(1)
+			else : talktime[facect].append(0)
+			#modified
+			#print("face['score'] = ",face['score'])
+			#print("clr = ", clr)
+			#modified
 			txt = round(face['score'], 1)
 			cv2.rectangle(image, (int(face['x']-face['s']), int(face['y']-face['s'])), (int(face['x']+face['s']), int(face['y']+face['s'])),(0,clr,255-clr),10)
 			cv2.putText(image,'%s'%(txt), (int(face['x']-face['s']), int(face['y']-face['s'])), cv2.FONT_HERSHEY_SIMPLEX, 1.5, (0,clr,255-clr),5)
+			facect+=1
+		for i in range(facect,2):
+			talktime[i].append(0)	
+		facecount = True
+
 		vOut.write(image)
+	#print("ctt = " , ctt)
+ 
+
+	savePath = os.path.join(args.pyworkPath, 'timecount.pckl')
+	with open(savePath, 'wb') as fil:
+		pickle.dump(talktime, fil)
+  
+	speaktime = cal_time(numpy.array(talktime),totalfaces)
+	savePathtime = os.path.join(args.pyworkPath, 'time.pckl')
+	with open(savePathtime, 'wb') as file:
+		pickle.dump(speaktime, file)
+	
+	data = {
+		"videoname" : args.videoName,
+		"speakers" : 2,
+		"time" : speaktime
+	}
+	savePathjson = os.path.join(args.pyworkPath, 'data.json')
+	with open(savePathjson, "w") as filee:
+		json.dump(data, filee, indent=4)
+
+	
+  
+  
 	vOut.release()
 	command = ("ffmpeg -y -i %s -i %s -threads %d -c:v copy -c:a copy %s -loglevel panic" % \
 		(os.path.join(args.pyaviPath, 'video_only.avi'), os.path.join(args.pyaviPath, 'audio.wav'), \
@@ -489,6 +636,8 @@ def main():
 	fil = open(savePath, 'rb')
 	vidTracks = pickle.load(fil)
 
+	
+
 	# Active Speaker Detection by TalkNet
 	files = glob.glob("%s/*.avi"%args.pycropPath)
 	files.sort()
@@ -514,5 +663,6 @@ def main():
 	sys.stderr.write(time.strftime("%Y-%m-%d %H:%M:%S") + " Face Crop and saved in %s tracks \r\n" %args.recropPath)
 	fil = open(savePath, 'rb')
 	vidTracks = pickle.load(fil)
+
 if __name__ == '__main__':
     main()

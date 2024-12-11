@@ -1,5 +1,5 @@
 import sys, time, os, tqdm, torch, argparse, glob, subprocess, warnings, cv2, pickle, numpy, pdb, math, python_speech_features
-import json
+
 from scipy import signal
 from shutil import rmtree
 from scipy.io import wavfile
@@ -104,7 +104,7 @@ def inference_video(args):
 		bboxes = DET.detect_faces(imageNumpy, conf_th=0.9, scales=[args.facedetScale])
 		dets.append([])
 		for bbox in bboxes:
-			dets[-1].append({'frame':fidx, 'bbox':(bbox[:-1]).tolist(), 'conf':bbox[-1]}) # dets has the frames info, bbox info, conf info
+		  dets[-1].append({'frame':fidx, 'bbox':(bbox[:-1]).tolist(), 'conf':bbox[-1]}) # dets has the frames info, bbox info, conf info
 		sys.stderr.write('%s-%05d; %d dets\r' % (args.videoFilePath, fidx, len(dets[-1])))
 	savePath = os.path.join(args.pyworkPath,'faces.pckl')
 	with open(savePath, 'wb') as fil:
@@ -159,55 +159,6 @@ def track_shot(args, sceneFaces):
 			if max(numpy.mean(bboxesI[:,2]-bboxesI[:,0]), numpy.mean(bboxesI[:,3]-bboxesI[:,1])) > args.minFaceSize:
 				tracks.append({'frame':frameI,'bbox':bboxesI})
 	return tracks
-
-def recrop_video(args, track, cropFile):
-	# CPU: crop the face clips
-	flist = glob.glob(os.path.join(args.pyframesPath, '*.jpg')) # Read the frames
-	flist.sort()
-	vOut = cv2.VideoWriter(cropFile + 't.avi', cv2.VideoWriter_fourcc(*'XVID'), 25, (224,224))# Write video
-	dets = {'x':[], 'y':[], 's':[]}
-	crp_scale = {
-		'width_right': 0.45,
-		'width_left': 0.45,
-		'height_top': 0.2,
-		'height_bottom': 0.3
-	}
-	for det in track['bbox']: # Read the tracks
-		xlength = det[2] - det[0]
-		ylength = det[3] - det[1]
-		det[0] = det[0] + (crp_scale['width_right']*xlength) 
-		det[2] = det[2] - (crp_scale['width_left']*xlength)
-		det[1] = det[1] - (crp_scale['height_top']*ylength)
-		det[3] = det[3] - (crp_scale['height_bottom']*ylength)
-		dets['s'].append(max((det[3]-det[1]), (det[2]-det[0]))/2) 
-		dets['y'].append((det[1]+det[3])/2) # crop center x 
-		dets['x'].append((det[0]+det[2])/2) # crop center y
-	dets['s'] = signal.medfilt(dets['s'], kernel_size=13)  # Smooth detections 
-	dets['x'] = signal.medfilt(dets['x'], kernel_size=13)
-	dets['y'] = signal.medfilt(dets['y'], kernel_size=13)
-	for fidx, frame in enumerate(track['frame']):
-		cs  = args.cropScale
-		bs  = dets['s'][fidx]   # Detection box size
-		bsi = int(bs * (1 + 2 * cs))  # Pad videos by this amount 
-		image = cv2.imread(flist[frame])
-		frame = numpy.pad(image, ((bsi,bsi), (bsi,bsi), (0, 0)), 'constant', constant_values=(110, 110))
-		my  = dets['y'][fidx] + bsi  # BBox center Y
-		mx  = dets['x'][fidx] + bsi  # BBox center X
-		face = frame[int(my-bs):int(my+bs*(1+2*cs)),int(mx-bs*(1+cs)):int(mx+bs*(1+cs))]
-		vOut.write(cv2.resize(face, (224, 224)))
-	audioTmp    = cropFile + '.wav'
-	audioStart  = (track['frame'][0]) / 25
-	audioEnd    = (track['frame'][-1]+1) / 25
-	vOut.release()
-	command = ("ffmpeg -y -i %s -async 1 -ac 1 -vn -acodec pcm_s16le -ar 16000 -threads %d -ss %.3f -to %.3f %s -loglevel panic" % \
-		      (args.audioFilePath, args.nDataLoaderThread, audioStart, audioEnd, audioTmp)) 
-	output = subprocess.call(command, shell=True, stdout=None) # Crop audio file
-	_, audio = wavfile.read(audioTmp)
-	command = ("ffmpeg -y -i %st.avi -i %s -threads %d -c:v copy -c:a copy %s.avi -loglevel panic" % \
-			  (cropFile, audioTmp, args.nDataLoaderThread, cropFile)) # Combine audio and video file
-	output = subprocess.call(command, shell=True, stdout=None)
-	os.remove(cropFile + 't.avi')
-	return {'track':track, 'proc_track':dets}
 
 def crop_video(args, track, cropFile):
 	# CPU: crop the face clips
@@ -430,14 +381,12 @@ def main():
 	args.pyframesPath = os.path.join(args.savePath, 'pyframes')
 	args.pyworkPath = os.path.join(args.savePath, 'pywork')
 	args.pycropPath = os.path.join(args.savePath, 'pycrop')
-	args.recropPath = os.path.join(args.savePath, 'recrop')
 	if os.path.exists(args.savePath):
 		rmtree(args.savePath)
 	os.makedirs(args.pyaviPath, exist_ok = True) # The path for the input video, input audio, output video
 	os.makedirs(args.pyframesPath, exist_ok = True) # Save all the video frames
 	os.makedirs(args.pyworkPath, exist_ok = True) # Save the results in this process by the pckl method
 	os.makedirs(args.pycropPath, exist_ok = True) # Save the detected face clips (audio+video) in this process
-	os.makedirs(args.recropPath, exist_ok = True) # Save the detected face clips (audio+video) in this process
 
 	# Extract video
 	args.videoFilePath = os.path.join(args.pyaviPath, 'video.avi')
@@ -505,14 +454,5 @@ def main():
 		# Visualization, save the result as the new video	
 		visualization(vidTracks, scores, args)	
 
-	#recrop
-	for ii, track in tqdm.tqdm(enumerate(allTracks), total = len(allTracks)):
-		vidTracks.append(recrop_video(args, track, os.path.join(args.recropPath, '%05d'%ii)))
-	savePath = os.path.join(args.pyworkPath, 'tracks.pckl')
-	with open(savePath, 'wb') as fil:
-		pickle.dump(vidTracks, fil)
-	sys.stderr.write(time.strftime("%Y-%m-%d %H:%M:%S") + " Face Crop and saved in %s tracks \r\n" %args.recropPath)
-	fil = open(savePath, 'rb')
-	vidTracks = pickle.load(fil)
 if __name__ == '__main__':
     main()

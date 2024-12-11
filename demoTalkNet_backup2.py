@@ -166,19 +166,13 @@ def recrop_video(args, track, cropFile):
 	flist.sort()
 	vOut = cv2.VideoWriter(cropFile + 't.avi', cv2.VideoWriter_fourcc(*'XVID'), 25, (224,224))# Write video
 	dets = {'x':[], 'y':[], 's':[]}
-	crp_scale = {
-		'width_right': 0.45,
-		'width_left': 0.45,
-		'height_top': 0.2,
-		'height_bottom': 0.3
-	}
 	for det in track['bbox']: # Read the tracks
 		xlength = det[2] - det[0]
 		ylength = det[3] - det[1]
-		det[0] = det[0] + (crp_scale['width_right']*xlength) 
-		det[2] = det[2] - (crp_scale['width_left']*xlength)
-		det[1] = det[1] - (crp_scale['height_top']*ylength)
-		det[3] = det[3] - (crp_scale['height_bottom']*ylength)
+		det[0] = det[0] + (0.45)*xlength 
+		det[2] = det[2] - (0.45)*xlength
+		det[1] = det[1] - (1/5)*ylength
+		det[3] = det[3] - (3/10)*ylength
 		dets['s'].append(max((det[3]-det[1]), (det[2]-det[0]))/2) 
 		dets['y'].append((det[1]+det[3])/2) # crop center x 
 		dets['x'].append((det[0]+det[2])/2) # crop center y
