@@ -32,6 +32,79 @@ Start from the existing environment
 pip install -r requirement.txt
 ```
 
+Some dependencies are not in the requirement.txt, you can install them by using:
+```
+sudo apt-get update
+sudo apt-get install -y libgl1-mesa-glx
+pip install --upgrade opencv-python
+pip install pandas
+sudo apt install ffmpeg
+```
+
+
+#### Usage
+
+
+We build an end-to-end script to detect and extract the active speaker from the raw video by our pretrain model in TalkSet. 
+
+You can put the raw video (`.mp4` and `.avi` are both fine) into the `demo` folder, such as `001.mp4`.
+
+
+```
+python demoTalkNet.py --videoName 001
+```
+
+The origin face video of both (or more) speakers will be saved in `demo/001/pycrops/`.
+The customized cropped face video of both (or more) speakers will be saved in `demo/001/recrop/`.
+
+
+
+A pretrain model in TalkSet will be downloaded into `TalkNet_ASD/pretrain_TalkSet.model`. The structure of the output reults can be found in [here](https://github.com/TaoRuijie/TalkNet_ASD/blob/main/demoTalkNet.py#L351).
+
+You can get the output video `demo/001/pyavi/video_out.avi`, which has marked the active speaker by green box and non-active speaker by red box.
+
+If you want to evaluate by using cpu only, you can modify `demoTalkNet.py` and `talkNet.py` file: modify all `cuda` into `cpu`. Then replace line 83 in talkNet.py into `loadedState = torch.load(path,map_location=torch.device('cpu'))`
+
+***
+
+### Citation
+
+Please cite the following if our paper or code is helpful to your research.
+```
+@inproceedings{tao2021someone,
+  title={Is Someone Speaking? Exploring Long-term Temporal Features for Audio-visual Active Speaker Detection},
+  author={Tao, Ruijie and Pan, Zexu and Das, Rohan Kumar and Qian, Xinyuan and Shou, Mike Zheng and Li, Haizhou},
+  booktitle = {Proceedings of the 29th ACM International Conference on Multimedia},
+  pages = {3927–3935},
+  year={2021}
+}
+```
+I have summaried some potential [FAQs](https://github.com/TaoRuijie/TalkNet_ASD/blob/main/FAQ.md). You can also check the `issues` in Github for other questions that I have answered.
+
+This is my first open-source work, please let me know if I can future improve in this repositories or there is anything wrong in our work. Thanks for your support!
+
+### Acknowledge
+
+We study many useful projects in our codeing process, which includes:
+
+The structure of the project layout and the audio encoder is learnt from this [repository](https://github.com/clovaai/voxceleb_trainer).
+
+Demo for visulization is modified from this [repository](https://github.com/joonson/syncnet_python).
+
+AVA data download code is learnt from this [repository](https://github.com/fuankarion/active-speakers-context).
+
+The model for the visual frontend is learnt from this [repository](https://github.com/lordmartian/deep_avsr).
+
+Thanks for these authors to open source their code!
+
+### Cooperation
+
+If you are interested to work on this topic and have some ideas to implement, I am glad to collaborate and contribute with my experiences & knowlegde in this topic. Please contact me with ruijie.tao@u.nus.edu.
+
+
+
+
+
 ***
 
 ## TalkNet in AVA-Activespeaker dataset
@@ -96,51 +169,3 @@ Also, Columnbia ASD dataset and the labels will be downloaded into `colDataPath`
 We build an end-to-end script to detect and extract the active speaker from the raw video by our pretrain model in TalkSet. 
 
 You can put the raw video (`.mp4` and `.avi` are both fine) into the `demo` folder, such as `001.mp4`.
-
-#### Usage
-
-```
-python demoTalkNet.py --videoName 001
-```
-
-A pretrain model in TalkSet will be downloaded into `TalkNet_ASD/pretrain_TalkSet.model`. The structure of the output reults can be found in [here](https://github.com/TaoRuijie/TalkNet_ASD/blob/main/demoTalkNet.py#L351).
-
-You can get the output video `demo/001/pyavi/video_out.avi`, which has marked the active speaker by green box and non-active speaker by red box.
-
-If you want to evaluate by using cpu only, you can modify `demoTalkNet.py` and `talkNet.py` file: modify all `cuda` into `cpu`. Then replace line 83 in talkNet.py into `loadedState = torch.load(path,map_location=torch.device('cpu'))`
-
-***
-
-### Citation
-
-Please cite the following if our paper or code is helpful to your research.
-```
-@inproceedings{tao2021someone,
-  title={Is Someone Speaking? Exploring Long-term Temporal Features for Audio-visual Active Speaker Detection},
-  author={Tao, Ruijie and Pan, Zexu and Das, Rohan Kumar and Qian, Xinyuan and Shou, Mike Zheng and Li, Haizhou},
-  booktitle = {Proceedings of the 29th ACM International Conference on Multimedia},
-  pages = {3927–3935},
-  year={2021}
-}
-```
-I have summaried some potential [FAQs](https://github.com/TaoRuijie/TalkNet_ASD/blob/main/FAQ.md). You can also check the `issues` in Github for other questions that I have answered.
-
-This is my first open-source work, please let me know if I can future improve in this repositories or there is anything wrong in our work. Thanks for your support!
-
-### Acknowledge
-
-We study many useful projects in our codeing process, which includes:
-
-The structure of the project layout and the audio encoder is learnt from this [repository](https://github.com/clovaai/voxceleb_trainer).
-
-Demo for visulization is modified from this [repository](https://github.com/joonson/syncnet_python).
-
-AVA data download code is learnt from this [repository](https://github.com/fuankarion/active-speakers-context).
-
-The model for the visual frontend is learnt from this [repository](https://github.com/lordmartian/deep_avsr).
-
-Thanks for these authors to open source their code!
-
-### Cooperation
-
-If you are interested to work on this topic and have some ideas to implement, I am glad to collaborate and contribute with my experiences & knowlegde in this topic. Please contact me with ruijie.tao@u.nus.edu.
